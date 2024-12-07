@@ -17,7 +17,7 @@ export async function POST(request: Request) {
     const { url } = await request.json();
 
     // Extract video ID from URL
-    const videoId = url.split('v=')[1]?.split('&')[0];
+    const videoId = url.split('v=')[1]?.split('&')[0] || url.split('youtu.be/')[1];
     if (!videoId) {
       return NextResponse.json(
         { error: 'Invalid YouTube URL' },
@@ -49,7 +49,7 @@ export async function POST(request: Request) {
     const publishedAt = video.snippet?.publishedAt || '';
 
     // Get video audio URL
-    const audioUrl = `https://www.youtube.com/watch?v=${videoId}`;
+    const audioUrl = `https://www.youtube.com/watch?v=${videoId}` || `https://youtu.be/${videoId}`;
 
     // Get transcript using AssemblyAI
     let transcript;
