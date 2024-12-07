@@ -1,5 +1,5 @@
 /* eslint-disable @typescript-eslint/no-unused-vars */
-import { NextRequest, NextResponse } from 'next/server'
+import { NextResponse } from 'next/server'
 import { IdeaService } from '../service'
 import { z } from 'zod'
 
@@ -14,10 +14,11 @@ const updateIdeaSchema = z.object({
 
 export async function GET(
   request: Request,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const idea = await IdeaService.getIdeaById(params.id)
+    const { id } = await params;
+    const idea = await IdeaService.getIdeaById(id)
     if (!idea) {
       return NextResponse.json(
         { error: 'Idea not found' },
@@ -26,21 +27,26 @@ export async function GET(
     }
     return NextResponse.json(idea)
   } catch (error) {
+    console.error('Error fetching idea:', error);
     return NextResponse.json(
-      { error: 'Internal Server Error' },
+      { 
+        error: 'Internal Server Error',
+        message: error instanceof Error ? error.message : 'Unknown error'
+      },
       { status: 500 }
     )
   }
 }
 
 export async function PATCH(
-  req: NextRequest,
-  { params }: { params: { id: string } }
+  request: Request,
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const body = await req.json()
+    const { id } = await params;
+    const body = await request.json()
     const validatedData = updateIdeaSchema.parse(body)
-    const updatedIdea = await IdeaService.updateIdea(params.id, validatedData)
+    const updatedIdea = await IdeaService.updateIdea(id, validatedData)
     return NextResponse.json(updatedIdea)
   } catch (error) {
     if (error instanceof z.ZodError) {
@@ -54,12 +60,13 @@ export async function PATCH(
 }
 
 export async function DELETE(
-  req: NextRequest,
-  { params }: { params: { id: string } }
+  request: Request,
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    console.log('Deleting idea with ID:', params.id);
-    await IdeaService.deleteIdea(params.id);
+    const { id } = await params;
+    console.log('Deleting idea with ID:', id);
+    await IdeaService.deleteIdea(id);
     return new NextResponse(null, { status: 204 });
   } catch (error) {
     console.error('Error deleting idea:', error);
@@ -71,4 +78,4 @@ export async function DELETE(
       { status: 500 }
     );
   }
-} 
+}

@@ -3,25 +3,20 @@ import { NextRequest, NextResponse } from 'next/server'
 import { IdeaService } from '../../service'
 import { Prisma } from '@prisma/client'
 
-type Context = {
-  params: {
-    id: string;
-  };
-};
-
 export async function POST(
   request: NextRequest,
-  context: Context
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    if (!context.params.id) {
+    const { id } = await params;
+    if (!id) {
       return NextResponse.json(
         { error: 'Idea ID is required' },
         { status: 400 }
       );
     }
 
-    const updatedIdea = await IdeaService.likeIdea(context.params.id);
+    const updatedIdea = await IdeaService.likeIdea(id);
     
     if (!updatedIdea) {
       return NextResponse.json(
