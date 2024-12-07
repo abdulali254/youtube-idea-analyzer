@@ -108,7 +108,7 @@ ${transcript}
           SUPPORTING_EVIDENCE: Relevant quotes from the transcript
           [END_IDEA]
 
-          Repeat this exact structure for each business idea identified. Make sure to keep the section titles exactly as shown above.`
+          Analyze the content thoroughly and identify ALL potential business ideas, no matter how many there are. Make sure to keep the section titles exactly as shown above.`
         },
         {
           role: "user",
@@ -117,7 +117,7 @@ ${transcript}
       ],
       temperature: 1.0,
       top_p: 1.0,
-      max_tokens: 4000,
+      max_tokens: 8000,
     });
 
     return NextResponse.json({

@@ -4,7 +4,11 @@ import { useState, useEffect } from 'react';
 import { useForm } from 'react-hook-form';
 import { z } from 'zod';
 import { zodResolver } from '@hookform/resolvers/zod';
-import Image from 'next/image';
+import { motion, AnimatePresence } from 'framer-motion';
+import { X } from 'lucide-react';
+import { toast } from 'sonner';
+import { VideoDetails } from '@/components/VideoDetails';
+import { useVideo } from '@/context/VideoContext';
 
 const formSchema = z.object({
   youtubeUrl: z.string().url('Please enter a valid YouTube URL')
@@ -42,6 +46,59 @@ export function TranscriptAnalyzer() {
   const [analysis, setAnalysis] = useState<AnalysisResult | null>(null);
   const [businessIdeas, setBusinessIdeas] = useState<BusinessIdea[]>([]);
   const [error, setError] = useState<string | null>(null);
+  const [selectedIdea, setSelectedIdea] = useState<BusinessIdea | null>(null);
+  const { setVideoDetails } = useVideo();
+
+  const saveIdeaToDatabase = async (idea: BusinessIdea) => {
+    try {
+      const metadata = {
+        mvpFeatures: idea.mvpFeatures || '',
+        monetization: idea.monetization || '',
+        technicalImplementation: idea.technicalImplementation || '',
+        keyInsights: idea.keyInsights || '',
+        viabilityScore: idea.viabilityScore || '',
+        marketPotential: idea.marketPotential || '',
+        technicalFeasibility: idea.technicalFeasibility || '',
+        resourceRequirements: idea.resourceRequirements || '',
+        competition: idea.competition || '',
+        supportingEvidence: idea.supportingEvidence || ''
+      };
+
+      const response = await fetch('/api/ideas', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          title: idea.ideaName || '',
+          description: idea.description || '',
+          tags: [idea.targetMarket || ''].filter(Boolean),
+          category: 'AI_GENERATED',
+          userId: 'system',
+          metadata
+        }),
+      });
+
+      let responseData;
+      try {
+        responseData = await response.json();
+      } catch (parseError) {
+        console.error('Error parsing response:', parseError);
+        throw new Error('Invalid server response');
+      }
+
+      if (!response.ok) {
+        console.error('Server error response:', responseData);
+        throw new Error(`Failed to save idea: ${response.status} ${response.statusText} - ${responseData?.message || 'Unknown error'}`);
+      }
+
+      console.log('Successfully saved idea:', responseData);
+      return responseData;
+    } catch (error) {
+      console.error('Error saving idea:', error);
+      throw error;
+    }
+  };
 
   useEffect(() => {
     if (analysis?.analysis) {
@@ -76,6 +133,47 @@ export function TranscriptAnalyzer() {
       });
 
       setBusinessIdeas(ideas);
+      
+      // Save ideas to database
+      const saveIdeas = async () => {
+        const toastId = toast.loading('Saving ideas to database...');
+        setError(null);
+        try {
+          // Save ideas in chunks of 3 to avoid overwhelming the server
+          const saveInChunks = async (ideas: BusinessIdea[]) => {
+            const results = [];
+            for (let i = 0; i < ideas.length; i += 3) {
+              const chunk = ideas.slice(i, i + 3);
+              const chunkResults = await Promise.allSettled(chunk.map(saveIdeaToDatabase));
+              results.push(...chunkResults);
+              // Add a small delay between chunks
+              if (i + 3 < ideas.length) {
+                await new Promise(resolve => setTimeout(resolve, 500));
+              }
+            }
+            return results;
+          };
+
+          const results = await saveInChunks(ideas);
+          
+          // Check if any saves failed
+          const failures = results.filter(result => result.status === 'rejected');
+          if (failures.length > 0) {
+            console.error('Some ideas failed to save:', failures);
+            setError(`Failed to save ${failures.length} ideas`);
+            toast.error(`Failed to save ${failures.length} ideas`, { id: toastId });
+          } else {
+            toast.success(`Successfully saved ${results.length} ideas!`, { id: toastId });
+            window.dispatchEvent(new CustomEvent('ideasUpdated'));
+          }
+        } catch (error) {
+          console.error('Error saving ideas:', error);
+          setError('Failed to save ideas to database. Please try again.');
+          toast.error('Failed to save ideas to database', { id: toastId });
+        }
+      };
+      
+      saveIdeas();
     }
   }, [analysis]);
 
@@ -91,6 +189,8 @@ export function TranscriptAnalyzer() {
     try {
       setIsLoading(true);
       setError(null);
+      setVideoDetails(null); // Reset video details before new request
+      
       const response = await fetch('/api/analyze', {
         method: 'POST',
         headers: {
@@ -105,15 +205,30 @@ export function TranscriptAnalyzer() {
 
       const result = await response.json();
       setAnalysis(result);
+      
+      // Update video details in context
+      if (result) {
+        const videoDetails = {
+          thumbnailUrl: result.thumbnailUrl,
+          videoTitle: result.videoTitle,
+          channelTitle: result.channelTitle,
+          publishedAt: result.publishedAt,
+          videoDescription: result.videoDescription
+        };
+        console.log('Setting video details:', videoDetails);
+        setVideoDetails(videoDetails);
+      }
     } catch (err) {
+      console.error('Error analyzing video:', err);
       setError(err instanceof Error ? err.message : 'Something went wrong');
+      setVideoDetails(null); // Reset video details on error
     } finally {
       setIsLoading(false);
     }
   };
 
   return (
-    <div className="space-y-8">
+    <div className="relative space-y-8">
       <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
         <div>
           <input
@@ -142,85 +257,123 @@ export function TranscriptAnalyzer() {
       )}
 
       {analysis && (
-        <div className="lg:grid lg:grid-cols-3 lg:gap-8">
-          <div className="col-span-2 space-y-6">
+        <>
+          <div className="lg:hidden mb-8 gap-4">
+            <VideoDetails
+              thumbnailUrl={analysis.thumbnailUrl}
+              videoTitle={analysis.videoTitle}
+              channelTitle={analysis.channelTitle}
+              publishedAt={analysis.publishedAt}
+              videoDescription={analysis.videoDescription}
+            />
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
             {businessIdeas.map((idea, index) => (
-              <div key={index} className="p-6 bg-white/5 rounded-lg border border-gray-700 relative">
-                <h2 className="text-xl font-semibold text-white mb-6">{idea.ideaName}</h2>
-                
-                <div className="space-y-6 text-sm text-gray-300">
-                  <div>
-                    <h3 className="text-white font-medium mb-2">Description</h3>
-                    <p>{idea.description}</p>
-                  </div>
+              <motion.div
+                key={index}
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: index * 0.1 }}
+                onClick={() => setSelectedIdea(idea)}
+                className="bg-gray-800/50 backdrop-blur-sm rounded-lg border border-gray-700/50 overflow-hidden hover:border-gray-600/50 transition-all duration-200 shadow-lg cursor-pointer p-4"
+              >
+                <h3 className="text-lg font-semibold text-white mb-2 line-clamp-2">
+                  {idea.ideaName}
+                </h3>
+                <p className="text-sm text-gray-300 mb-3 line-clamp-2">
+                  {idea.description}
+                </p>
 
-                  <div>
-                    <h3 className="text-white font-medium mb-2">Target Market</h3>
-                    <p>{idea.targetMarket}</p>
-                  </div>
+                <div className="flex items-center gap-2 text-xs mt-auto">
+                  <span className="px-2 py-1 bg-blue-500/10 text-blue-400 rounded">
+                    Score: {idea.viabilityScore}
+                  </span>
+                  <span className="text-gray-400 line-clamp-1">
+                    {idea.targetMarket}
+                  </span>
+                </div>
+              </motion.div>
+            ))}
+          </div>
+        </>
+      )}
 
-                  <div>
-                    <h3 className="text-white font-medium mb-2">MVP Features</h3>
-                    <p>{idea.mvpFeatures}</p>
-                  </div>
+      {/* Modal */}
+      <AnimatePresence>
+        {selectedIdea && (
+          <div className="fixed inset-0 flex items-center z-50">
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              onClick={() => setSelectedIdea(null)}
+              className="absolute inset-0 bg-black/80 backdrop-blur-sm"
+            />
+            <motion.div
+              initial={{ x: -100, opacity: 0 }}
+              animate={{ x: 0, opacity: 1 }}
+              exit={{ x: -100, opacity: 0 }}
+              className="relative ml-4 w-[90vw] md:w-[600px] max-h-[85vh] overflow-y-auto bg-gray-800/95 rounded-xl shadow-2xl border border-gray-700"
+            >
+              <div className="p-6">
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setSelectedIdea(null);
+                  }}
+                  className="absolute right-4 top-4 text-gray-400 hover:text-white transition-colors"
+                >
+                  <X className="h-5 w-5" />
+                </button>
 
-                  <div>
-                    <h3 className="text-white font-medium mb-2">Monetization</h3>
-                    <p>{idea.monetization}</p>
-                  </div>
+                <h2 className="text-xl font-semibold text-white mb-4">{selectedIdea.ideaName}</h2>
+                <p className="text-gray-300 mb-4">{selectedIdea.description}</p>
 
-                  <div>
-                    <h3 className="text-white font-medium mb-2">Technical Implementation</h3>
-                    <p>{idea.technicalImplementation}</p>
-                  </div>
-
-                  <div>
-                    <h3 className="text-white font-medium mb-2">Key Insights</h3>
-                    <p>{idea.keyInsights}</p>
-                  </div>
-
-                  <div className="bg-white/5 p-4 rounded-lg">
-                    <h3 className="text-white font-medium mb-3">Viability Analysis</h3>
-                    <div className="space-y-2">
-                      <p>Score: {idea.viabilityScore}</p>
-                      <p>Market Potential: {idea.marketPotential}</p>
-                      <p>Technical Feasibility: {idea.technicalFeasibility}</p>
-                      <p>Resource Requirements: {idea.resourceRequirements}</p>
-                      <p>Competition: {idea.competition}</p>
+                <div className="space-y-6">
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <div>
+                      <h3 className="font-medium text-white mb-2">MVP Features</h3>
+                      <p className="text-gray-300 text-sm">{selectedIdea.mvpFeatures}</p>
+                    </div>
+                    <div>
+                      <h3 className="font-medium text-white mb-2">Monetization</h3>
+                      <p className="text-gray-300 text-sm">{selectedIdea.monetization}</p>
                     </div>
                   </div>
 
-                  <div className="bg-blue-500/10 border border-blue-500/20 p-4 rounded-lg">
-                    <h3 className="text-white font-medium mb-2">Supporting Evidence</h3>
-                    <p className="italic">{idea.supportingEvidence}</p>
+                  <div>
+                    <h3 className="font-medium text-white mb-2">Technical Implementation</h3>
+                    <p className="text-gray-300 text-sm">{selectedIdea.technicalImplementation}</p>
+                  </div>
+
+                  <div className="bg-blue-500/10 p-4 rounded-lg">
+                    <div className="flex justify-between items-center mb-4">
+                      <h3 className="font-medium text-blue-400">Viability Analysis</h3>
+                      <span className="text-blue-400 font-semibold">{selectedIdea.viabilityScore}</span>
+                    </div>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
+                      <div>
+                        <p className="font-medium text-white">Market Potential</p>
+                        <p className="text-gray-300">{selectedIdea.marketPotential}</p>
+                      </div>
+                      <div>
+                        <p className="font-medium text-white">Technical Feasibility</p>
+                        <p className="text-gray-300">{selectedIdea.technicalFeasibility}</p>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div>
+                    <h3 className="font-medium text-white mb-2">Supporting Evidence</h3>
+                    <p className="text-gray-300 text-sm">{selectedIdea.supportingEvidence}</p>
                   </div>
                 </div>
               </div>
-            ))}
+            </motion.div>
           </div>
-
-          <div className="mt-8 lg:mt-0">
-            <div className="sticky top-8">
-              <div className="p-6 bg-white/5 rounded-lg border border-gray-700">
-                <div className="aspect-video relative mb-4 rounded-lg overflow-hidden">
-                  <Image
-                    src={analysis.thumbnailUrl}
-                    alt={analysis.videoTitle}
-                    fill
-                    className="object-cover"
-                  />
-                </div>
-                <h2 className="text-lg font-semibold text-white mb-2">{analysis.videoTitle}</h2>
-                <div className="space-y-2 text-sm text-gray-300">
-                  <p className="font-medium">{analysis.channelTitle}</p>
-                  <p>{new Date(analysis.publishedAt).toLocaleDateString()}</p>
-                  <p className="line-clamp-3">{analysis.videoDescription}</p>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
+        )}
+      </AnimatePresence>
     </div>
   );
 } 
