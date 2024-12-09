@@ -1,10 +1,10 @@
 # Next.js Modern Web Application
 
-[![Next.js](https://img.shields.io/badge/Next.js-13.0+-black?style=for-the-badge&logo=next.js)](https://nextjs.org/)
+[![Next.js](https://img.shields.io/badge/Next.js-15.0+-black?style=for-the-badge&logo=next.js)](https://nextjs.org/)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.0+-blue?style=for-the-badge&logo=typescript)](https://www.typescriptlang.org/)
 [![Tailwind CSS](https://img.shields.io/badge/Tailwind_CSS-3.0+-38B2AC?style=for-the-badge&logo=tailwind-css)](https://tailwindcss.com/)
 
-A modern, high-performance web application built with Next.js 13+, TypeScript, and Tailwind CSS. This project implements best practices for server-side rendering, static site generation, and modern UI/UX design principles.
+A modern, high-performance web application built with Next.js 15+, TypeScript, and Tailwind CSS. This project implements best practices for server-side rendering, static site generation, and modern UI/UX design principles.
 
 ## 🚀 Features
 
